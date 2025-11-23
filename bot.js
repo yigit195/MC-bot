@@ -1,9 +1,0 @@
-{
-  "name": "mc-afk-bot",
-  "version": "1.0.0",
-  "main": "bot.js",
-  "dependencies": {
-    "mineflayer": "latest",
-    "mineflayer-pathfinder": "latest"
-  }
-}
