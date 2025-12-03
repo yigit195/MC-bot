@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Kırmızı Kare Zıplama Oyunu | V5</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <style>
+        body {
+            background-color: #87CEEB;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            flex-direction: column;
+            touch-action: manipulation; 
+        }
+
+        #score-container {
+            width: 90%; 
+            max-width: 600px; 
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 1.5em;
+            font-weight: bold;
+            color: #333;
+        }
+
+        #high-score { color: #E74C3C; }
+
+        #game-container {
+            width: 90%; 
+            max-width: 600px; 
+            height: 200px;
+            border: 5px solid #333;
+            background-color: #87CEEB; 
+            position: relative;
+            overflow: hidden; 
+        }
+
+        #game-container::after {
+            content: "";
+            position: absolute;
+            bottom: 0; 
+            left: 0;
+            width: 100%;
+            height: 3px; 
+            background-color: #555; 
+            z-index: 5; 
+        }
+
+        #player {
+            width: 30px;
+            height: 30px;
+            background-color: red;
+            position: absolute;
+            bottom: 0; 
+            left: 5%; 
+            z-index: 10; 
+            transition: bottom 0.02s linear, transform 0.1s ease-out; 
+        }
+
+        #player-shadow {
+            position: absolute;
+            width: 30px;
+            height: 5px;
+            background: rgba(0, 0, 0, 0.2); 
+            border-radius: 50%; 
+            bottom: 0;
+            left: 5%; 
+            z-index: 9; 
+            transition: all 0.2s ease-out; 
+        }
+
+        .obstacle {
+            width: 20px;
+            height: 60px;
+            background-color: green;
+            position: absolute;
+            bottom: 0; 
+            left: 100%; /* sağdan başlasın */
+            z-index: 8; 
+        }
+
+        #game-status {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            background-color: rgba(255, 255, 255, 0.95); 
+            padding: 25px 40px;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.6);
+            display: none; 
+            z-index: 100; 
+        }
+
+        #restart-button {
+            padding: 10px 20px;
+            margin-top: 15px;
+            font-size: 1.1em;
+            cursor: pointer;
+            background-color: #333;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div id="score-container">
+        <div id="score">Skor: 0</div>
+        <div id="high-score">En İyi: 0</div>
+    </div>
+    
+    <div id="game-container">
+        <div id="player"></div>
+        <div id="player-shadow"></div> 
+
+        <div id="game-status">
+            <h2>Oyun Bitti!</h2>
+            <p id="final-score">Skorunuz: 0</p>
+            <button id="restart-button">Yeniden Başla</button>
+        </div>
+    </div>
+    <p style="margin-top: 15px; font-size: 0.9em;"></p>
+
+    <script>
+        const player = document.getElementById('player');
+        const playerShadow = document.getElementById('player-shadow'); 
+        const container = document.getElementById('game-container');
+        const scoreDisplay = document.getElementById('score');
+        const highScoreDisplay = document.getElementById('high-score');
+        const gameStatus = document.getElementById('game-status');
+        const restartButton = document.getElementById('restart-button');
+        const finalScoreDisplay = document.getElementById('final-score');
+
+        let isJumping = false;
+        let playerBottom = 0;
+        let score = 0;
+        let highScore = localStorage.getItem('highScore') || 0; 
+        let gameActive = true; 
+        let baseObstacleSpeed = 4; 
+
+        let obstacleIntervals = [];
+        let obstacleTimeout;
+
+        highScoreDisplay.textContent = `En İyi: ${highScore}`;
+
+        // Zıplama
+        function jump() {
+            if (!gameActive || isJumping) return;
+            isJumping = true;
+            let jumpHeight = 100; 
+            let upTime = 0;
+            const jumpStep = 5;
+            const jumpIntervalTime = 20;
+
+            const upInterval = setInterval(() => {
+                if (upTime >= jumpHeight) { 
+                    clearInterval(upInterval);
+                    const downInterval = setInterval(() => {
+                        if (playerBottom <= 0) {
+                            clearInterval(downInterval);
+                            isJumping = false;
+                            playerBottom = 0;
+                            player.style.bottom = playerBottom + 'px';
+                        } else {
+                            playerBottom -= jumpStep;
+                            player.style.bottom = playerBottom + 'px';
+                        }
+                    }, jumpIntervalTime);
+                } else {
+                    upTime += jumpStep;
+                    playerBottom += jumpStep;
+                    player.style.bottom = playerBottom + 'px';
+                }
+            }, jumpIntervalTime);
+        }
+
+        // Engel oluşturma
+        function createObstacle() {
+            if (!gameActive) return;
+            const obstacle = document.createElement('div');
+            obstacle.classList.add('obstacle');
+            container.appendChild(obstacle);
+
+            let obstacleLeft = container.offsetWidth;
+            obstacle.style.left = obstacleLeft + 'px';
+
+            const obstacleInterval = setInterval(() => {
+                if (!gameActive) {
+                    clearInterval(obstacleInterval);
+                    if (obstacle.parentElement) obstacle.remove();
+                    return;
+                }
+
+                obstacleLeft -= baseObstacleSpeed;
+                obstacle.style.left = obstacleLeft + 'px';
+
+                const playerRect = player.getBoundingClientRect();
+                const obstacleRect = obstacle.getBoundingClientRect();
+
+                // Çarpışma kontrolü
+                if (
+                    playerRect.right > obstacleRect.left &&
+                    playerRect.left < obstacleRect.right &&
+                    playerRect.bottom > obstacleRect.top
+                ) {
+                    gameOver();
+                }
+
+                // Engel ekranın solundan çıkınca sil
+                if (obstacleLeft < -20) {
+                    clearInterval(obstacleInterval);
+                    if (obstacle.parentElement) obstacle.remove();
+                    score++;
+                    scoreDisplay.textContent = `Skor: ${score}`;
+                    if (score > highScore) {
+                        highScore = score;
+                        localStorage.setItem('highScore', highScore);
+                        highScoreDisplay.textContent = `En İyi: ${highScore}`;
+                    }
+                }
+            }, 20);
+
+            obstacleIntervals.push(obstacleInterval);
+            obstacleTimeout = setTimeout(createObstacle, 1500 + Math.random() * 2000);
+        }
+
+        // Oyun bitti
+        function gameOver() {
+            gameActive = false;
+            clearTimeout(obstacleTimeout);
+            obstacleIntervals.forEach(interval => clearInterval(interval));
+            obstacleIntervals = [];
+            gameStatus.style.display = 'block';
+            finalScoreDisplay.textContent = `Skorunuz: ${score}`;
+        }
+
+        // Yeniden başlat
+        restartButton.addEventListener('click', () => {
+            gameActive = true;
+            score = 1;
+            scoreDisplay.textContent = 'Skor: 0';
+            gameStatus.style.display = 'none';
+            container.querySelectorAll('.obstacle').forEach(o => o.remove());
+            createObstacle();
+        });
+
+        // Başlangıçta engel üretmeye başla
+        createObstacle();
+
+        // Zıplama olayları (klavye + dokunmatik)
+        document.addEventListener('keydown', (event) => {
+            if (event.code === 'Space') jump();
+        });
+        document.addEventListener('click', jump);
+        document.addEventListener('touchstart', jump); // dokunmatik kontrol
+    </script>
+</body>
+</html>
